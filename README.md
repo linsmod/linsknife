@@ -12,10 +12,12 @@ Some small solutions for me to solve really problems.
 
 ## FT_Get_Var_Design_Coordinates
 download https://sourceforge.net/projects/freetype/files/freetype2/2.13.3/
+```
 ./configure
 make
 sudo make install
 sudo rm /lib/x86_64-linux-gnu/libfreetype.so.6
 sudo cp /usr/local/lib/libfreetype.* /lib/x86_64-linux-gnu/
+```
 
 
