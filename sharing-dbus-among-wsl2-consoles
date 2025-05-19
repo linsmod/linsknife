@@ -1,0 +1,155 @@
+https://x410.dev/cookbook/wsl/sharing-dbus-among-wsl2-consoles/
+跳至内容
+X410.dev徽标
+家
+消息
+食谱
+下载
+买
+接触
+在 WSL2 控制台之间共享 D-Bus
+2022年4月10日
+
+WSL
+
+许多现代 Unix/Linux GUI 应用程序使用D-Bus相互通信并管理其生命周期（例如，创建单实例应用程序或守护进程）。
+
+在完整的 Ubuntu 系统中，systemd会在启动时启动，并自动配置 D-Bus。但是，WSL2（Windows Subsystem for Linux 2）不支持运行systemd，因此您无法在打开 Ubuntu/WSL2 控制台时自动配置 D-Bus。
+
+我们准备了以下步骤来设置可在所有 Ubuntu/WSL2 控制台中共享的 D-Bus 守护进程。虽然以下步骤主要针对 Ubuntu，但您应该能够以类似的方式为 WSL2 Linux 发行版设置 D-Bus。
+
+ 系统 D-Bus
+
+Ubuntu 已经提供了启动 D-Bus 的机制，可供系统中的所有用户和进程使用。您可以通过service命令启动该系统总线。
+
+sudo service dbus start
+ 会话 D-Bus
+
+如果您打算仅使用一个 Ubuntu 控制台来运行所有 Linux GUI 应用程序，则只需执行以下命令即可启动会话 D-Bus。
+
+eval $(dbus-launch --sh-syntax)
+一旦执行，您应该能够看到 DBUS_SESSION_BUS_ADDRESS 环境变量现已为您的应用程序设置。
+
+echo $DBUS_SESSION_BUS_ADDRESS
+但是，当您打开另一个 Ubuntu 控制台时，新创建的 DBUS_SESSION_BUS_ADDRESS 环境变量不会自动转移到新的控制台。您可以为新控制台启动另一个会话 D-Bus，但在新控制台中启动的应用程序无法与之前控制台中使用其他会话 D-Bus 启动的应用程序进行通信。
+
+我们没有使用上面所示的命令，而是dbus-launch准备eval了以下 Bash 脚本来创建可在所有 Ubuntu 控制台中共享的会话 D-Bus。我们的方法利用了 WSL2 中的目录管理行为。
+
+WSL2 不支持运行systemd来管理守护进程和执行系统任务。但是，/run/user每当 WSL 首次启动时（例如，重新启动 Windows 后，或通过执行 明确终止并重新启动wsl.exe --shutdown），它都会自动清空目录。因此，步骤 1 中的以下脚本会检查/run/user/$(id -u)目录中是否存在 D-Bus Unix 套接字，并且只有当套接字不存在时才会创建新套接字。
+
+在完整的 Ubuntu 系统中，/run/user/$(id -u)首次登录系统时会自动创建目录。XDG_RUNTIME_DIR 环境变量也会自动设置并指向该目录。为了模拟此行为，步骤 1 中的脚本还会设置 XDG_RUNTIME_DIR 环境变量，并在目录不存在的情况下创建该目录。如果目录不存在，您可以放心地认为您的 Ubuntu/WSL2 刚刚启动，现在是启动其他守护进程和服务的最佳时机，如脚本所示。
+
+ 创造~/.bash_sysinit
+
+在下面显示的脚本中，您必须将<your_ubuntu_wsl2_password>其替换为您为 Ubuntu/WSL2 设置的密码。如果您不方便在脚本中添加密码，可以删除该行并在运行脚本时直接输入密码；由于您只需在第一次打开 Ubuntu/WSL2 控制台时输入一次密码，因此应该不会太麻烦……
+
+~/.bash_sysinit
+# X410 WSL2 Helper
+# https://x410.dev/cookbook/#wsl
+# --------------------
+# Setting up D-Bus for Ubuntu
+# --------------------
+
+sudo_autopasswd()
+{
+    echo "<your_ubuntu_wsl2_password>" | sudo -Svp ""
+    # Default timeout for caching your sudo password: 15 minutes
+
+    # If you're uncomfortable entering your password here,
+    # you can comment out the line above. But keep in mind that functions
+    # in a Bash script cannot be empty; comment lines are ignored.
+    # A function should at least have a ':' (null command).
+    # https://tldp.org/LDP/abs/html/functions.html#EMPTYFUNC
+}
+
+sudo_resetpasswd()
+{
+    # Clears cached password for sudo
+    sudo -k
+}
+
+#
+# '/run/user' directory is always empty when WSL2 is first
+# launched; a perfect time to setup daemons and D-Bus
+#
+
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+{
+    sudo_autopasswd
+
+    # Create user runtime directories
+    sudo mkdir $XDG_RUNTIME_DIR && sudo chmod 700 $XDG_RUNTIME_DIR && sudo chown $(id -un):$(id -gn) $XDG_RUNTIME_DIR
+
+    # System D-Bus
+    sudo service dbus start
+
+    # --------------------
+    # Start additional services as they are needed.
+    # We recommend adding commands that require 'sudo' here. For other
+    # regular background processes, you should add them below where a
+    # session 'dbus-daemon' is started.
+    # --------------------
+
+    sudo_resetpasswd
+}
+fi
+
+set_session_dbus()
+{
+    local bus_file_path="$XDG_RUNTIME_DIR/bus"
+
+    export DBUS_SESSION_BUS_ADDRESS=unix:path=$bus_file_path
+    if [ ! -e "$bus_file_path" ]; then
+    {
+        /usr/bin/dbus-daemon --session --address=$DBUS_SESSION_BUS_ADDRESS --nofork --nopidfile --syslog-only &
+
+        # --------------------
+        # More background processes can be added here.
+        # For 'sudo' requiring commands, you should add them above
+        # where the 'dbus' service is started.
+        # --------------------
+
+    }
+    fi
+}
+
+set_session_dbus
+ 将以下内容添加到您的~/.profile加载~/.bash_sysinit
+
+if [ -f ~/.bash_sysinit ]; then
+    . ~/.bash_sysinit
+fi
+您可以使用~/.profile或~/.bashrc来添加上面显示的命令。我们建议使用，因为如果未调用 Bash 进行交互式会话，~/.profile默认会立即退出。以下文章包含有关 Bash 登录脚本的更多信息。~/.bashrc
+
+ 我应该在哪里添加 DISPLAY 环境变量？
+ 尝试打开一个新的 Ubuntu/WSL2 控制台
+
+每当打开新的 Ubuntu 控制台时，您应该能够确认 DBUS_SESSION_BUS_ADDRESS 环境变量始终指向/run/user/$(id -u)目录中的同一个 Unix 套接字。
+
+
+分享这个故事，选择您的平台！
+对 X410 有疑问吗？
+请使用以下电子邮件地址之一联系我们。所有信息请求将在 1 个工作日内处理。
+产品咨询
+或技术支持
+support@choung.net
+一般评论、
+问题或订单状态
+sales@choung.net
+所有语言都很美！不过，请使用英语或韩语联系我们。遗憾的是，我们目前只能理解和回复这些语言的消息。
+给我们留言吧！我们期待您的反馈！
+
+我们住在桑尼维尔。不过，桑尼维尔并不总是阳光明媚。:-(
+生活不易。不过，我们希望我们的应用能让你的日子更加美好！^^;
+- Choung Park，首席开发人员
+最近的食谱
+将 X410 与 WSL2 结合使用
+在 WSL2 中启用 systemd 并获得最佳的 Ubuntu GUI 桌面体验！
+启用间接 GLX/OpenGL
+将您自己的 X-Window 位图或 TrueType 字体添加到 X410
+如何从 Microsoft Store 安装“X410（版本 3）”
+© 2001- 2025 Choung Networks   •  隐私声明
+本网站使用 Cookie 和第三方服务。继续使用本网站即表示您同意我们的Cookie 政策。
+好的，我明白了
+转至顶部
