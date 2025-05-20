@@ -1,0 +1,5 @@
+https://github.com/search?q=type%3Aissue+author%3Alinsmod&ref=opensearch&type=pullrequests
+
+https://github.com/search?q=mentions%3Alinsmod&ref=opensearch&type=issues
+
+https://github.com/search?q=lintrust&ref=opensearch&type=issues
