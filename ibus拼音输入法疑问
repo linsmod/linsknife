@@ -1,0 +1,19 @@
+ibus-libpinyin 是 ibus-pinyin 的现代替代品，
+基于更强大的 libpinyin 库，具备更智能的拼音输入体验（如更好的组词、纠错、学习能力），是新用户和追求输入体验用户的首选；
+而 ibus-pinyin 是较老的实现，功能相对基础，适合兼容或简单使用。
+
+Ubuntu 22.04 默认libpinyin版本Intelligent Pinyin 1.12.1
+
+自己编译禁用V模式, IBus 智能拼音 1.16.4
+
+git clone https://github.com/epico/ibus-libpinyin.git
+configure.ac:209 这里改成no
+```
+# --disable-english-input-mode
+AC_ARG_ENABLE(english-input-mode,
+    AS_HELP_STRING([--disable-english-input-mode],
+    [do not build english input mode]),
+    [enable_english_input_mode=$enableval],
+    [enable_english_input_mode=no] <<< HERE
+)
+```
