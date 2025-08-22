@@ -6,7 +6,22 @@ Ubuntu 22.04 默认libpinyin版本Intelligent Pinyin 1.12.1
 
 自己编译禁用V模式, IBus 智能拼音 1.16.4
 
+deps: libpinyin-2.8.1
+not use apt install, it will install a version without PKG_CONFIG 
+and it's a old version not supported by newversion of ibus-libpinyin
+
 git clone https://github.com/epico/ibus-libpinyin.git
+configure.ac:184 CLOUD_INPUT_MODE yes
+```
+# --enable-cloud-input-mode
+CLOUD_INPUT_MODE="False"
+AC_ARG_ENABLE(cloud-input-mode,
+    AC_HELP_STRING([--enable-cloud-input-mode],
+        [add cloud candidates]),
+        [enable_cloud_input_mode=$enableval],
+        [enable_cloud_input_mode=yes] <<< HERE
+)
+```
 configure.ac:209 这里改成no
 ```
 # --disable-english-input-mode
@@ -16,4 +31,41 @@ AC_ARG_ENABLE(english-input-mode,
     [enable_english_input_mode=$enableval],
     [enable_english_input_mode=no] <<< HERE
 )
+```
+
+aclocal-1.17: command not found
+这说明你的系统尝试运行 aclocal-1.17，但没有找到这个命令。
+
+🔍 问题分析
+你的项目 Makefile 要求使用 aclocal-1.17，但你的系统上可能安装的是其他版本的 Automake（比如 1.16.5），所以系统里只有 aclocal-1.16，没有 aclocal-1.17。
+
+✅ 根本原因：Automake 版本不匹配 —— 项目是用 Automake 1.17 生成的，但你的系统没有安装这个版本。
+
+✅ 解决方案
+✅ 方法一：安装 Automake 1.17（推荐）
+Ubuntu 官方仓库可能没有 1.17，你需要手动安装或添加 PPA。
+
+1. 检查当前已安装的 automake 版本
+bash
+浅色版本
+automake --version
+输出类似：
+
+浅色版本
+automake (GNU automake) 1.16.5
+说明你装的是 1.16，不是 1.17。
+
+2. 安装 Automake 1.17（手动编译）
+```bash
+浅色版本
+# 下载 Automake 1.17 源码
+cd /tmp
+wget https://ftp.gnu.org/gnu/automake/automake-1.17.tar.gz
+tar -xzf automake-1.17.tar.gz
+cd automake-1.17
+
+# 编译安装
+./configure --prefix=/usr
+make
+sudo make install
 ```
