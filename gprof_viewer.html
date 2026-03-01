@@ -1,0 +1,1800 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GProf 性能分析报告查看器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        h1 {
+            text-align: center;
+            padding: 10px;
+            background: linear-gradient(90deg, #0f3460, #533483);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            font-size: 18px;
+        }
+        .file-input-area {
+            background: #0f3460;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .file-input-area input[type="file"] { display: none; }
+        .file-label {
+            display: inline-block;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #e94560, #533483);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .file-label:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(233, 69, 96, 0.4);
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .tab {
+            padding: 8px 16px;
+            background: #0f3460;
+            border: none;
+            border-radius: 5px;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+        .tab:hover { background: #1a4a7a; }
+        .tab.active { background: linear-gradient(135deg, #e94560, #533483); }
+        .search-box { margin-bottom: 20px; }
+        .search-box input {
+            width: 100%;
+            max-width: 400px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            background: #0f3460;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+        .search-box input::placeholder { color: #888; }
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: #0f3460;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-card .value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #e94560;
+        }
+        .stat-card .label {
+            font-size: 14px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .table-container {
+            background: #0f3460;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #1a4a7a;
+        }
+        th {
+            background: #1a4a7a;
+            cursor: pointer;
+            user-select: none;
+            position: sticky;
+            top: 0;
+        }
+        th:hover { background: #2a5a8a; }
+        tr:hover { background: rgba(233, 69, 96, 0.1); }
+        .function-name {
+            color: #4fc3f7;
+            font-family: monospace;
+        }
+        .section-title {
+            padding: 8px 12px;
+            background: #1a4a7a;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .content-section { display: none; }
+        .content-section.active { display: block; }
+        .call-graph-node {
+            background: #16213e;
+            border: 2px solid #533483;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px;
+        }
+        .call-graph-node .index {
+            color: #e94560;
+            font-weight: bold;
+        }
+        .call-graph-node .name {
+            color: #4fc3f7;
+            font-family: monospace;
+            font-size: 16px;
+        }
+        .call-graph-node .stats {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .callers, .callees {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+        .callers-title, .callees-title {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .caller-item, .callee-item {
+            padding: 5px 10px;
+            margin: 3px 0;
+            background: rgba(83, 52, 131, 0.3);
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 15px;
+        }
+        .pagination button {
+            padding: 8px 16px;
+            background: #0f3460;
+            border: none;
+            border-radius: 5px;
+            color: #e0e0e0;
+            cursor: pointer;
+        }
+        .pagination button:hover { background: #1a4a7a; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .page-info { padding: 8px 16px; color: #888; }
+        .chart-bar-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 20px;
+        }
+        .chart-label {
+            width: 200px;
+            font-family: monospace;
+            font-size: 12px;
+            text-align: right;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chart-bar-wrapper {
+            flex: 1;
+            height: 25px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .chart-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #e94560, #533483);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            font-size: 11px;
+            color: white;
+            min-width: fit-content;
+        }
+        .no-data { text-align: center; padding: 50px; color: #888; }
+        .cycle { background: rgba(233, 69, 96, 0.2); border-left: 3px solid #e94560; }
+        .index-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 5px;
+            padding: 20px;
+        }
+        .index-item {
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 5px;
+            font-size: 13px;
+        }
+        .index-item .idx { color: #e94560; margin-right: 10px; }
+        .index-item .fname { color: #4fc3f7; font-family: monospace; }
+        .index-item .source { color: #888; font-size: 11px; margin-left: 10px; }
+        #callGraphContainer { max-height: 800px; overflow-y: auto; padding: 10px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="tabs">
+            <span class="tab" style="background:linear-gradient(135deg, #e94560, #533483);cursor:default;">🔥 GProf <span id="fileStatus"></span></span>
+            <label class="tab" for="fileInput" style="cursor:pointer;">📁 选择文件</label>
+            <input type="file" id="fileInput" accept=".txt" style="display:none;">
+            <button class="tab active" data-tab="flat">📊 Flat Profile</button>
+            <button class="tab" data-tab="graph">🔗 Call Graph</button>
+            <button class="tab" data-tab="chart">📈 调用次数图表</button>
+            <button class="tab" data-tab="index">📋 函数索引</button>
+            <button class="tab" data-tab="3dgraph">🌐 3D Call Graph</button>
+            <input type="text" id="searchInput" placeholder="🔍 搜索函数名..." style="margin-left:10px;padding:6px 10px;border:none;border-radius:5px;background:#0f3460;color:#e0e0e0;font-size:12px;width:180px;">
+        </div>
+
+        <div id="contentArea" style="display: none;">
+            <div class="stats-summary" style="display: none;" id="statsSummary"></div>
+
+            <div id="flat" class="content-section active">
+                <div class="table-container">
+                    <div class="section-title">Flat Profile - 函数性能统计</div>
+                    <div style="overflow-x: auto;">
+                        <table id="flatTable">
+                            <thead>
+                                <tr>
+                                    <th data-sort="time">时间%</th>
+                                    <th data-sort="cumulative">累计秒</th>
+                                    <th data-sort="self">自身秒</th>
+                                    <th data-sort="calls">调用次数</th>
+                                    <th data-sort="tsCall">Ts/call</th>
+                                    <th data-sort="totalCall">Tt/call</th>
+                                    <th data-sort="name">函数名</th>
+                                </tr>
+                            </thead>
+                            <tbody id="flatTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="pagination" id="flatPagination"></div>
+            </div>
+
+            <div id="graph" class="content-section">
+                <div class="table-container">
+                    <div class="section-title">Call Graph - 调用关系图</div>
+                    <div id="callGraphContainer"></div>
+                </div>
+                <div class="pagination" id="graphPagination"></div>
+            </div>
+
+            <div id="chart" class="content-section">
+                <div class="table-container">
+                    <div class="section-title">调用次数 Top 30</div>
+                    <div id="topCallsChart" style="padding: 20px;"></div>
+                </div>
+            </div>
+
+            <div id="index" class="content-section">
+                <div class="table-container">
+                    <div class="section-title">函数索引 (按名称排序)</div>
+                    <div class="index-list" id="indexList"></div>
+                </div>
+            </div>
+<div id="3dgraph" class="content-section">
+    <div class="table-container">
+        <div class="section-title">🌐 3D Call Graph - 电路板式多层布局</div>
+        <div id="threejsContainer" style="width:100%;height:700px;position:relative;">
+            <div id="threejsInfo" style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.6);padding:10px;border-radius:8px;font-size:12px;z-index:10;color:#e0e0e0;backdrop-filter:blur(4px);">
+                <div>🖱️ 左键拖动: 旋转 | 右键拖动: 平移 | 滚轮: 缩放</div>
+                <div id="nodeInfo" style="margin-top:6px;color:#4fc3f7;font-weight:bold;"></div>
+                <div id="loading3D" style="color:#e94560;display:none;">正在构建 3D 图谱...</div>
+            </div>
+            <div id="heatmapLegend" style="position:absolute;bottom:15px;right:15px;background:rgba(0,0,0,0.6);padding:10px;border-radius:8px;font-size:11px;z-index:10;color:#ccc;backdrop-filter:blur(4px);">
+                <div style="margin-bottom:5px;font-weight:bold;">调用热度</div>
+                <div id="legendGradient" style="width:150px;height:12px;background:linear-gradient(to right, #00ff00, #ffff00, #ff8800, #ff0000);border-radius:3px;"></div>
+                <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:10px;">
+                    <span>低</span><span>高</span>
+                </div>
+                <div style="margin-top:10px;border-top:1px solid #555;padding-top:8px;">
+                    <div style="font-weight:bold;margin-bottom:5px;">连接端口</div>
+                    <div style="display:flex;align-items:center;gap:5px;margin:3px 0;">
+                        <div style="width:10px;height:10px;border-radius:50%;background:#00cc88;"></div>
+                        <span>输入端口</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:5px;margin:3px 0;">
+                        <div style="width:10px;height:10px;border-radius:50%;background:#ff8855;"></div>
+                        <span>输出端口</span>
+                    </div>
+                </div>
+                <div style="margin-top:10px;border-top:1px solid #555;padding-top:8px;">
+                    <div style="font-weight:bold;margin-bottom:5px;">层级说明</div>
+                    <div style="font-size:10px;color:#aaa;">高频调用函数在上层</div>
+                    <div style="font-size:10px;color:#aaa;">同层函数位置相近</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let flatProfileData = [];
+        let callGraphData = [];
+        let indexData = [];
+        let currentTab = 'flat';
+        let currentPage = 1;
+        let itemsPerPage = 50;
+        let sortColumn = 'calls';
+        let sortDirection = 'desc';
+        let searchTerm = '';
+
+        const fileInput = document.getElementById('fileInput');
+        const fileStatus = document.getElementById('fileStatus');
+        const contentArea = document.getElementById('contentArea');
+        const searchInput = document.getElementById('searchInput');
+        const tabs = document.querySelectorAll('.tab');
+
+        // 从 localStorage 加载保存的数据
+        function loadFromStorage() {
+            const savedData = localStorage.getItem('gprof_data');
+            const savedFileName = localStorage.getItem('gprof_filename');
+            if (savedData && savedFileName) {
+                parseGprofReport(savedData);
+                fileStatus.textContent = `已加载: ${savedFileName}`;
+                contentArea.style.display = 'block';
+            }
+        }
+
+        // 页面加载时尝试恢复数据
+        loadFromStorage();
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                fileStatus.textContent = `正在加载 ${file.name}...`;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    // 保存到 localStorage
+                    localStorage.setItem('gprof_data', evt.target.result);
+                    localStorage.setItem('gprof_filename', file.name);
+                    parseGprofReport(evt.target.result);
+                    fileStatus.textContent = `已加载: ${file.name}`;
+                    contentArea.style.display = 'block';
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentTab = tab.dataset.tab;
+                currentPage = 1;
+                
+                // 切换内容区域显示
+                document.querySelectorAll('.content-section').forEach(section => {
+                    section.classList.remove('active');
+                });
+                const targetSection = document.getElementById(currentTab);
+                if (targetSection) {
+                    targetSection.classList.add('active');
+                }
+                
+                renderCurrentTab();
+            });
+        });
+
+        searchInput.addEventListener('input', (e) => {
+            searchTerm = e.target.value.toLowerCase();
+            currentPage = 1;
+            renderCurrentTab();
+        });
+
+        document.querySelectorAll('th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const col = th.dataset.sort;
+                if (sortColumn === col) {
+                    sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortColumn = col;
+                    sortDirection = 'desc';
+                }
+                renderFlatProfile();
+            });
+        });
+
+        function parseGprofReport(text) {
+            flatProfileData = [];
+            callGraphData = [];
+            indexData = [];
+
+            const lines = text.split('\n');
+            let section = 'none';
+            let i = 0;
+
+            while (i < lines.length) {
+                const line = lines[i];
+                
+                if (line.includes('Flat profile:')) {
+                    section = 'flat';
+                    i += 6;
+                    continue;
+                }
+                if (line.includes('Call graph (explanation follows)')) {
+                    section = 'graph';
+                    i += 5;
+                    continue;
+                }
+                if (line.includes('Index by function name')) {
+                    section = 'index';
+                    i += 2;
+                    continue;
+                }
+
+                if (section === 'flat') {
+                    if (line.trim() === '' || line.includes('%   cumulative') || line.includes('time   seconds')) {
+                        i++;
+                        continue;
+                    }
+                    if (line.includes('the percentage of the total running time')) {
+                        section = 'none';
+                        i++;
+                        continue;
+                    }
+                    const parsed = parseFlatLine(line);
+                    if (parsed) flatProfileData.push(parsed);
+                }
+
+                if (section === 'graph') {
+                    if (line.includes('This table describes the call tree')) {
+                        section = 'none';
+                        i++;
+                        continue;
+                    }
+                    const parsed = parseGraphBlock(lines, i);
+                    if (parsed) {
+                        callGraphData.push(parsed);
+                        i = parsed.endIndex;
+                        continue;
+                    }
+                }
+
+                if (section === 'index') {
+                    const parsed = parseIndexLine(line);
+                    if (parsed) indexData.push(parsed);
+                }
+
+                i++;
+            }
+
+            renderStats();
+            renderCurrentTab();
+        }
+
+        function parseFlatLine(line) {
+            const match = line.match(/^\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+(.+)$/);
+            if (match) {
+                return {
+                    time: parseFloat(match[1]),
+                    cumulative: parseFloat(match[2]),
+                    self: parseFloat(match[3]),
+                    calls: parseInt(match[4]),
+                    tsCall: parseFloat(match[5]),
+                    totalCall: parseFloat(match[6]),
+                    name: match[7].trim()
+                };
+            }
+            return null;
+        }
+
+        function parseGraphBlock(lines, startIdx) {
+            const line = lines[startIdx];
+            const headerMatch = line.match(/^\[(\d+)\]\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+(.+?)\s+\[(\d+)\]$/);
+            if (!headerMatch) return null;
+
+            const node = {
+                index: parseInt(headerMatch[1]),
+                timePercent: parseFloat(headerMatch[2]),
+                selfTime: parseFloat(headerMatch[3]),
+                childrenTime: parseFloat(headerMatch[4]),
+                called: headerMatch[5].trim(),
+                name: headerMatch[6].trim(),
+                callers: [],
+                callees: [],
+                endIndex: startIdx + 1
+            };
+
+            for (let i = startIdx + 1; i < lines.length; i++) {
+                const l = lines[i];
+                if (l.match(/^\[(\d+)\]/) || l.match(/^---+$/) || l.trim() === '') {
+                    if (l.match(/^---+$/)) {
+                        node.endIndex = i + 1;
+                    } else {
+                        node.endIndex = i;
+                    }
+                    break;
+                }
+                
+                const callerMatch = l.match(/^\s*([\d.]+)\s+([\d.]+)\s+(\d+)(?:\+(\d+))?\s+(.+?)\s*\[(\d+)\]$/);
+                if (callerMatch) {
+                    node.callers.push({
+                        self: parseFloat(callerMatch[1]),
+                        children: parseFloat(callerMatch[2]),
+                        calls: callerMatch[3],
+                        callsPlus: callerMatch[4] || '0',
+                        name: callerMatch[5].trim(),
+                        index: callerMatch[6]
+                    });
+                }
+                
+                const calleeMatch = l.match(/^\s+([\d.]+)\s+([\d.]+)\s+(\d+)(?:\/(\d+))?\s+(.+?)\s*\[(\d+)\]$/);
+                if (calleeMatch) {
+                    node.callees.push({
+                        self: parseFloat(calleeMatch[1]),
+                        children: parseFloat(calleeMatch[2]),
+                        calls: calleeMatch[3],
+                        totalCalls: calleeMatch[4] || calleeMatch[3],
+                        name: calleeMatch[5].trim(),
+                        index: calleeMatch[6]
+                    });
+                }
+            }
+
+            return node;
+        }
+
+        function parseIndexLine(line) {
+            const match = line.match(/^\s*\[(\d+)\]\s+(\S+)(?:\s+\((.+?)\))?$/);
+            if (match) {
+                return {
+                    index: parseInt(match[1]),
+                    name: match[2],
+                    source: match[3] || ''
+                };
+            }
+            return null;
+        }
+
+        function renderStats() {
+            const totalCalls = flatProfileData.reduce((sum, d) => sum + d.calls, 0);
+            const totalFunctions = flatProfileData.length;
+            const topFunction = flatProfileData.length > 0 ? flatProfileData[0].name : 'N/A';
+
+            document.getElementById('statsSummary').innerHTML = `
+                <div class="stat-card">
+                    <div class="value">${totalFunctions}</div>
+                    <div class="label">函数总数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">${totalCalls.toLocaleString()}</div>
+                    <div class="label">总调用次数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">${topFunction}</div>
+                    <div class="label">最热函数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">${callGraphData.length}</div>
+                    <div class="label">调用图节点</div>
+                </div>
+            `;
+        }
+
+        function renderCurrentTab() {
+            switch (currentTab) {
+                case 'flat': renderFlatProfile(); break;
+                case 'graph': renderCallGraph(); break;
+                case 'chart': renderChart(); break;
+                case 'index': renderIndex(); break;
+                case '3dgraph': render3DCallGraph(); break;
+            }
+        }
+
+        function getFilteredData(data, searchField = 'name') {
+            if (!searchTerm) return data;
+            return data.filter(d => d[searchField].toLowerCase().includes(searchTerm));
+        }
+
+        function sortData(data) {
+            return [...data].sort((a, b) => {
+                let aVal = a[sortColumn];
+                let bVal = b[sortColumn];
+                if (typeof aVal === 'string') {
+                    return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                }
+                return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+        }
+
+        function renderFlatProfile() {
+            const filtered = getFilteredData(flatProfileData);
+            const sorted = sortData(filtered);
+            const totalPages = Math.ceil(sorted.length / itemsPerPage);
+            const start = (currentPage - 1) * itemsPerPage;
+            const pageData = sorted.slice(start, start + itemsPerPage);
+
+            const tbody = document.getElementById('flatTableBody');
+            tbody.innerHTML = pageData.map(d => `
+                <tr>
+                    <td>${d.time.toFixed(2)}%</td>
+                    <td>${d.cumulative.toFixed(2)}</td>
+                    <td>${d.self.toFixed(2)}</td>
+                    <td class="calls-cell">${d.calls.toLocaleString()}</td>
+                    <td>${d.tsCall.toFixed(2)}</td>
+                    <td>${d.totalCall.toFixed(2)}</td>
+                    <td class="function-name">${escapeHtml(d.name)}</td>
+                </tr>
+            `).join('');
+
+            renderPagination('flatPagination', totalPages, () => renderFlatProfile());
+        }
+
+        function renderCallGraph() {
+            const filtered = getFilteredData(callGraphData);
+            const totalPages = Math.ceil(filtered.length / itemsPerPage);
+            const start = (currentPage - 1) * itemsPerPage;
+            const pageData = filtered.slice(start, start + itemsPerPage);
+
+            const container = document.getElementById('callGraphContainer');
+            container.innerHTML = pageData.map(node => `
+                <div class="call-graph-node ${node.name.includes('cycle') ? 'cycle' : ''}">
+                    <div>
+                        <span class="index">[${node.index}]</span>
+                        <span class="name">${escapeHtml(node.name)}</span>
+                    </div>
+                    <div class="stats">
+                        时间: ${node.timePercent}% | 自身: ${node.selfTime}s | 子函数: ${node.childrenTime}s | 调用: ${node.called}
+                    </div>
+                    ${node.callers.length > 0 ? `
+                        <div class="callers">
+                            <div class="callers-title">↑ 被调用者 (${node.callers.length})</div>
+                            ${node.callers.slice(0, 5).map(c => `
+                                <div class="caller-item">
+                                    <span style="color:#4fc3f7">${escapeHtml(c.name)}</span>
+                                    [${c.index}] - ${c.calls}次
+                                </div>
+                            `).join('')}
+                            ${node.callers.length > 5 ? `<div style="color:#888;font-size:11px;">... 还有 ${node.callers.length - 5} 个</div>` : ''}
+                        </div>
+                    ` : ''}
+                    ${node.callees.length > 0 ? `
+                        <div class="callees">
+                            <div class="callees-title">↓ 调用者 (${node.callees.length})</div>
+                            ${node.callees.slice(0, 5).map(c => `
+                                <div class="callee-item">
+                                    <span style="color:#4fc3f7">${escapeHtml(c.name)}</span>
+                                    [${c.index}] - ${c.calls}次
+                                </div>
+                            `).join('')}
+                            ${node.callees.length > 5 ? `<div style="color:#888;font-size:11px;">... 还有 ${node.callees.length - 5} 个</div>` : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+
+            renderPagination('graphPagination', totalPages, () => renderCallGraph());
+        }
+
+        function renderChart() {
+            const sorted = [...flatProfileData].sort((a, b) => b.calls - a.calls);
+            const maxCalls = sorted.length > 0 ? sorted[0].calls : 1;
+
+            const container = document.getElementById('topCallsChart');
+            container.innerHTML = sorted.map(d => `
+                <div class="chart-bar-container">
+                    <div class="chart-label" title="${escapeHtml(d.name)}">${escapeHtml(d.name)}</div>
+                    <div class="chart-bar-wrapper">
+                        <div class="chart-bar" style="width: ${(d.calls / maxCalls * 100)}%">
+                            ${d.calls.toLocaleString()}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderIndex() {
+            const filtered = getFilteredData(indexData);
+            const sorted = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+
+            const container = document.getElementById('indexList');
+            container.innerHTML = sorted.map(d => `
+                <div class="index-item">
+                    <span class="idx">[${d.index}]</span>
+                    <span class="fname">${escapeHtml(d.name)}</span>
+                    ${d.source ? `<span class="source">(${escapeHtml(d.source)})</span>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function renderPagination(containerId, totalPages, renderFn) {
+            const container = document.getElementById(containerId);
+            if (totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = `
+                <button ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1}, '${containerId}')">上一页</button>
+                <span class="page-info">第 ${currentPage} / ${totalPages} 页</span>
+                <button ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1}, '${containerId}')">下一页</button>
+            `;
+        }
+
+        window.changePage = function(page, containerId) {
+            currentPage = page;
+            if (containerId === 'flatPagination') renderFlatProfile();
+            else if (containerId === 'graphPagination') renderCallGraph();
+        };
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+// ==================== 全新 3D Call Graph 实现 ====================
+
+let scene3d = null;
+let camera3d = null;
+let renderer3d = null;
+let controls3d = null;
+let raycaster3d = null;
+let mouse3d = null;
+let animationId3d = null;
+let simulationRunning = false;
+let numLayers = 1;  // 层数
+let layerVias = []; // 存储层上的过孔
+
+// 找到最近的过孔（全局函数）
+function findNearestVia(x, y, layerVias, layer) {
+    const layerData = layerVias.find(lv => lv.layer === layer);
+    if (!layerData) return null;
+    
+    let nearestVia = null;
+    let minDist = Infinity;
+    
+    layerData.vias.forEach(via => {
+        const dist = Math.sqrt((via.x - x) ** 2 + (via.y - y) ** 2);
+        if (dist < minDist) {
+            minDist = dist;
+            nearestVia = via;
+        }
+    });
+    
+    return nearestVia;
+}
+
+// 力导向模拟参数 - 电路板式多层布局
+const forceParams = {
+    charge: -1500,         // 斥力（增大，让节点更分散）
+    linkDistance: 250,     // 链接距离（增大）
+    linkStrength: 0.25,    // 链接强度（降低，让连接更松弛）
+    friction: 0.9,
+    theta: 0.8,
+    alphaDecay: 0.1,       // 大幅增大衰减率，快速收敛
+    velocityDecay: 0.8,    // 大幅增大速度衰减
+    layerSeparation: 280,  // 层间距（大幅增大）
+    layerAttraction: 0.08  // 层内吸引力（降低）
+};
+
+function init3DScene() {
+    const container = document.getElementById('threejsContainer');
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    scene3d = new THREE.Scene();
+    scene3d.background = new THREE.Color(0x1a1a2e);  // 更亮的背景色
+    // 使用指数雾化，密度极低，让远处更清晰
+    scene3d.fog = new THREE.FogExp2(0x1a1a2e, 0.00015);  // 指数雾化，密度极低
+
+    camera3d = new THREE.PerspectiveCamera(60, width / height, 0.1, 3000);
+    camera3d.position.set(0, 0, 600);
+
+    renderer3d = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer3d.setSize(width, height);
+    renderer3d.setPixelRatio(window.devicePixelRatio);
+    renderer3d.shadowMap.enabled = true;
+    
+    // 保存现有的信息面板元素
+    const infoPanel = document.getElementById('threejsInfo');
+    const legendPanel = document.getElementById('heatmapLegend');
+    
+    container.innerHTML = '';
+    container.appendChild(renderer3d.domElement);
+    
+    // 重新添加信息面板
+    if (infoPanel) container.appendChild(infoPanel);
+    if (legendPanel) container.appendChild(legendPanel);
+
+    controls3d = new THREE.OrbitControls(camera3d, renderer3d.domElement);
+     controls3d.enableDamping = true;
+    controls3d.dampingFactor = 0.5;  // 增大阻尼系数，让镜头更快停止
+    controls3d.minDistance = 100;
+    controls3d.maxDistance = 2500;
+
+    // 环境光 + 主光源 - 更亮的照明
+    const ambient = new THREE.AmbientLight(0xffffff, 1.0);
+    scene3d.add(ambient);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(100, 100, 50);
+    scene3d.add(dirLight);
+
+    // 移除星空背景，保持简洁
+
+    raycaster3d = new THREE.Raycaster();
+    mouse3d = new THREE.Vector2();
+
+    window.addEventListener('resize', onWindowResize3D);
+    container.addEventListener('mousemove', onMouseMove3D);
+    container.addEventListener('click', onClick3D);
+}
+
+function onWindowResize3D() {
+    if (!renderer3d || !camera3d) return;
+    const container = document.getElementById('threejsContainer');
+    camera3d.aspect = container.clientWidth / container.clientHeight;
+    camera3d.updateProjectionMatrix();
+    renderer3d.setSize(container.clientWidth, container.clientHeight);
+}
+
+let mouseMoved3d = false;  // 标记鼠标是否移动
+
+function onMouseMove3D(event) {
+    if (!raycaster3d || !camera3d) return;
+    const container = event.currentTarget;
+    const rect = container.getBoundingClientRect();
+    mouse3d.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse3d.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    mouseMoved3d = true;  // 标记鼠标已移动
+}
+
+function onClick3D(event) {
+    if (!raycaster3d || !camera3d) return;
+    raycaster3d.setFromCamera(mouse3d, camera3d);
+    const intersects = raycaster3d.intersectObjects(nodes3d.map(n => n.mesh));
+    if (intersects.length > 0) {
+        const mesh = intersects[0].object;
+        const nodeData = mesh.userData;
+        // 可扩展：跳转到 flat profile 或 graph tab
+        console.log("Clicked node:", nodeData);
+    }
+}
+
+// ===== 力导向模拟核心数据结构 =====
+let nodes3d = []; // { mesh, data, fx, fy, fz, vx, vy, vz, anchors }
+let links3d = []; // { sourceIndex, targetIndex, mesh, calls, arrowMesh }
+let anchorHelpers = []; // 锚点辅助可视化对象
+
+function render3DCallGraph() {
+    if (callGraphData.length === 0) {
+        document.getElementById('nodeInfo').innerHTML = '<span style="color:#e94560">⚠️ 无调用图数据，请加载 gprof 文件</span>';
+        return;
+    }
+
+    document.getElementById('loading3D').style.display = 'block';
+    document.getElementById('nodeInfo').textContent = '';
+
+    if (!scene3d) init3DScene();
+
+    // 清理旧场景
+    nodes3d.forEach(n => {
+        scene3d.remove(n.mesh);
+        if (n.circle) scene3d.remove(n.circle);
+        if (n.label) scene3d.remove(n.label);
+    });
+    links3d.forEach(l => {
+        scene3d.remove(l.mesh);
+        if (l.arrowMesh) scene3d.remove(l.arrowMesh);
+        if (l.sourceAnchorMesh) scene3d.remove(l.sourceAnchorMesh);
+        if (l.targetAnchorMesh) scene3d.remove(l.targetAnchorMesh);
+    });
+    anchorHelpers.forEach(h => scene3d.remove(h));
+    nodes3d = [];
+    links3d = [];
+    anchorHelpers = [];
+
+    // 构建节点映射
+    const nameToNode = new Map();
+    const flatMap = new Map(flatProfileData.map(d => [d.name, d]));
+
+    // 获取最大调用次数用于颜色计算
+    const maxCalls = Math.max(...flatProfileData.map(d => d.calls), 1);
+    
+    // 节点颜色函数 - 使用暖色调 (绿->黄->橙->红)
+    function getHeatmapColor(value, min, max) {
+        const t = max === min ? 0.5 : (value - min) / (max - min);
+        // 从绿色(120°)到红色(0°)
+        const hue = 120 - t * 120;
+        const saturation = 0.8;
+        const lightness = 0.5;
+        
+        const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
+        const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
+        const m = lightness - c / 2;
+        
+        let r, g, b;
+        if (hue < 60) { r = c; g = x; b = 0; }
+        else if (hue < 120) { r = x; g = c; b = 0; }
+        else { r = 0; g = c; b = x; }
+        
+        return new THREE.Color(r + m, g + m, b + m);
+    }
+    
+    // 按调用次数分层 - 电路板式布局
+    // 将节点按调用次数分组，高频调用在同一层且靠近
+    const sortedByCalls = [...callGraphData].map((node, idx) => {
+        const calls = flatMap.get(node.name)?.calls || 1;
+        return { node, idx, calls };
+    }).sort((a, b) => b.calls - a.calls);
+    
+    // 使用全局变量 numLayers
+    const totalNodes = callGraphData.length;
+    const layerAssignments = new Map();
+    
+    // 按调用频率分配层（高频在上层）
+    sortedByCalls.forEach((item, rank) => {
+        const layer = Math.min(numLayers - 1, Math.floor(rank / Math.ceil(totalNodes / numLayers)));
+        layerAssignments.set(item.idx, layer);
+    });
+    
+    // 层板边界常量
+    const layerHalfWidth = 1000;   // 层板半宽（留边距50）
+    const layerHalfHeight = 800;  // 层板半高（留边距50）
+    
+    // 预先计算每个节点是否有 callees（用于决定是否显示输出端口）
+    const nodeHasCallees = new Map();
+    callGraphData.forEach((node, idx) => {
+        nodeHasCallees.set(idx, node.callees && node.callees.length > 0);
+    });
+    
+    // 创建 Three.js 节点 - 电路板元件风格
+    callGraphData.forEach((node, idx) => {
+        const calls = flatMap.get(node.name)?.calls || 1;
+        const timePercent = node.timePercent || 0;
+        const layer = layerAssignments.get(idx) || 0;
+        const hasCallees = nodeHasCallees.get(idx) || false;
+        
+        // 初始位置：按层分布，同层节点在网格上排列，限制在层板边界内
+        const layerZ = (layer - numLayers / 2) * forceParams.layerSeparation;
+        const nodesInLayer = [...layerAssignments.entries()].filter(([k, v]) => v === layer).length;
+        const posInLayer = [...layerAssignments.entries()].filter(([k, v]) => v === layer).findIndex(([k, v]) => k === idx);
+        
+        // 计算网格布局，确保在边界内
+        const gridCols = Math.max(3, Math.ceil(Math.sqrt(nodesInLayer * 1.2)));
+        const gridRows = Math.ceil(nodesInLayer / gridCols);
+        const gridRow = Math.floor(posInLayer / gridCols);
+        const gridCol = posInLayer % gridCols;
+        
+        // 计算网格间距，确保不超出边界
+        const cellWidth = (layerHalfWidth * 2) / gridCols;
+        const cellHeight = (layerHalfHeight * 2) / Math.max(1, gridRows);
+        const spacing = Math.min(cellWidth, cellHeight) * 0.8;
+        
+        // 节点固定在层的水平面上（Z坐标固定），位置限制在层板边界内
+        const posX = (gridCol - (gridCols - 1) / 2) * spacing;
+        const posY = (gridRow - (gridRows - 1) / 2) * spacing;
+        
+        const position = new THREE.Vector3(
+            Math.max(-layerHalfWidth, Math.min(layerHalfWidth, posX)),
+            Math.max(-layerHalfHeight, Math.min(layerHalfHeight, posY)),
+            layerZ  // Z坐标固定在层平面上
+        );
+
+        // 创建文本标签
+        const baseColor = getHeatmapColor(calls, 1, maxCalls);
+        const displayName = node.name.length > 18 ? node.name.substring(0, 16) + '...' : node.name;
+        
+        // 使用 Canvas 创建文本纹理 - 电路板元件风格
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const fontSize = 14 + Math.min(8, Math.log(calls + 1) * 2);
+        canvas.width = 280;
+        canvas.height = 56;
+        
+        // 绘制方块背景 - 电路板芯片风格
+        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        gradient.addColorStop(0, 'rgba(30, 35, 45, 0.92)');
+        gradient.addColorStop(1, 'rgba(20, 25, 35, 0.92)');
+        ctx.fillStyle = gradient;
+        ctx.roundRect(0, 0, canvas.width, canvas.height, 4);
+        ctx.fill();
+        
+        // 绘制细边框 - 电路板走线风格
+        ctx.strokeStyle = `rgba(${Math.floor(baseColor.r * 255)}, ${Math.floor(baseColor.g * 255)}, ${Math.floor(baseColor.b * 255)}, 0.9)`;
+        ctx.lineWidth = 1.5;
+        ctx.roundRect(0, 0, canvas.width, canvas.height, 4);
+        ctx.stroke();
+        
+        // 绘制左侧连接点（输入端口）- 始终显示
+        ctx.beginPath();
+        ctx.arc(8, canvas.height / 2, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#00cc88';
+        ctx.fill();
+        
+        // 绘制右侧连接点（输出端口）- 仅当有调用其他函数时显示
+        if (hasCallees) {
+            ctx.beginPath();
+            ctx.arc(canvas.width - 8, canvas.height / 2, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff8855';
+            ctx.fill();
+        }
+        
+        // 绘制函数名
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${fontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(displayName, canvas.width / 2, canvas.height / 2 - 8);
+        
+        // 绘制调用次数
+        ctx.fillStyle = '#999';
+        ctx.font = '11px sans-serif';
+        ctx.fillText(`calls: ${calls.toLocaleString()}`, canvas.width / 2, canvas.height / 2 + 10);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        
+        const spriteMaterial = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false
+        });
+        
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.position.copy(position);
+        const scale = 100 + Math.min(10, Math.log(calls + 1) * 3);  // 增大节点尺寸，确保比过孔大
+        sprite.scale.set(scale, scale * 0.2, 1);
+        sprite.userData = { name: node.name, index: node.index, calls, timePercent, layer };
+
+        scene3d.add(sprite);
+
+        nodes3d.push({
+            mesh: sprite,
+            circle: null,  // 不再使用圆圈
+            circleRadius: scale * 0.5,
+            data: node,
+            layer: layer,
+            fixedZ: layerZ,  // 固定的Z坐标（层平面）
+            x: position.x,
+            y: position.y,
+            z: position.z,
+            vx: 0, vy: 0, vz: 0,
+            fx: null, fy: null, fz: layerZ  // fz固定为层Z坐标
+        });
+        nameToNode.set(node.name, idx);
+    });
+
+    // 创建层底板 - 固定尺寸，有厚度的盒子
+    const layerPlates = [];  // 存储层底板对象
+    layerVias = [];    // 存储层上的过孔（使用全局变量）
+    const layerWidth = 1024;   // 固定宽度
+    const layerHeight = 768;  // 固定高度
+    const layerThickness = 5; // 层板厚度
+    
+    // 过孔网格配置
+    const viaGridCols = 8;    // 过孔列数
+    const viaGridRows = 6;    // 过孔行数
+    const viaRadius = 6;      // 过孔半径
+    const viaSpacingX = (layerWidth - 100) / (viaGridCols - 1);  // 过孔水平间距
+    const viaSpacingY = (layerHeight - 100) / (viaGridRows - 1); // 过孔垂直间距
+    
+    for (let layer = 0; layer < numLayers; layer++) {
+        const layerZ = (layer - numLayers / 2) * forceParams.layerSeparation;
+        
+        // 层颜色 - 根据层级渐变（从上到下：暖色到冷色）
+        const layerRatio = layer / (numLayers - 1 || 1);
+        const layerHue = 200 + layerRatio * 40; // 200°(蓝) -> 240°(紫)
+        const layerColor = new THREE.Color().setHSL(layerHue / 360, 0.4, 0.25);
+        
+        // 创建有厚度的盒子几何体
+        const boxGeometry = new THREE.BoxGeometry(layerWidth, layerHeight, layerThickness);
+        
+        // 创建半透明材质 - 更明显
+        const boxMaterial = new THREE.MeshPhongMaterial({
+            color: layerColor,
+            transparent: true,
+            opacity: 0.6,
+            side: THREE.DoubleSide,
+            depthWrite: true,
+            shininess: 30
+        });
+        
+        const box = new THREE.Mesh(boxGeometry, boxMaterial);
+        box.position.set(0, 0, layerZ - layerThickness / 2 - 20);
+        box.userData = { layer, isLayerPlate: true };
+        
+        scene3d.add(box);
+        layerPlates.push({ mesh: box, layer });
+        
+        // 添加层边框线 - 更明显
+        const halfW = layerWidth / 2;
+        const halfH = layerHeight / 2;
+        const borderZ = layerZ - layerThickness - 20;
+        const borderPoints = [
+            new THREE.Vector3(-halfW, -halfH, borderZ),
+            new THREE.Vector3(halfW, -halfH, borderZ),
+            new THREE.Vector3(halfW, halfH, borderZ),
+            new THREE.Vector3(-halfW, halfH, borderZ),
+            new THREE.Vector3(-halfW, -halfH, borderZ)
+        ];
+        const borderGeometry = new THREE.BufferGeometry().setFromPoints(borderPoints);
+        const borderMaterial = new THREE.LineBasicMaterial({
+            color: layerColor.clone().multiplyScalar(1.5),
+            transparent: true,
+            opacity: 0.8,
+            linewidth: 2
+        });
+        const border = new THREE.Line(borderGeometry, borderMaterial);
+        scene3d.add(border);
+        layerPlates[layerPlates.length - 1].border = border;
+        
+        // 添加层级标签
+        const labelCanvas = document.createElement('canvas');
+        const labelCtx = labelCanvas.getContext('2d');
+        labelCanvas.width = 128;
+        labelCanvas.height = 32;
+        labelCtx.fillStyle = 'rgba(150, 170, 200, 0.9)';
+        labelCtx.font = 'bold 14px sans-serif';
+        labelCtx.textAlign = 'center';
+        labelCtx.textBaseline = 'middle';
+        labelCtx.fillText(`Layer ${layer + 1}`, 64, 16);
+        
+        const labelTexture = new THREE.CanvasTexture(labelCanvas);
+        const labelMaterial = new THREE.SpriteMaterial({
+            map: labelTexture,
+            transparent: true,
+            depthWrite: false
+        });
+        const labelSprite = new THREE.Sprite(labelMaterial);
+        labelSprite.position.set(-halfW + 50, halfH - 20, borderZ);
+        labelSprite.scale.set(25, 6, 1);
+        scene3d.add(labelSprite);
+        layerPlates[layerPlates.length - 1].label = labelSprite;
+        
+        // 在层板上添加过孔（vias）- 电路板风格
+        const layerViaPositions = [];
+        const viaStartX = -halfW + 50;
+        const viaStartY = -halfH + 50;
+        
+        for (let row = 0; row < viaGridRows; row++) {
+            for (let col = 0; col < viaGridCols; col++) {
+                const viaX = viaStartX + col * viaSpacingX;
+                const viaY = viaStartY + row * viaSpacingY;
+                
+                // 创建过孔外圈（铜环）
+                const viaOuterGeometry = new THREE.RingGeometry(viaRadius * 0.6, viaRadius, 16);
+                const viaOuterMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xcc9933,  // 铜色
+                    transparent: true,
+                    opacity: 0.7,
+                    side: THREE.DoubleSide
+                });
+                const viaOuter = new THREE.Mesh(viaOuterGeometry, viaOuterMaterial);
+                viaOuter.position.set(viaX, viaY, layerZ + 1);
+                scene3d.add(viaOuter);
+                
+                // 创建过孔内圈（孔洞）
+                const viaInnerGeometry = new THREE.CircleGeometry(viaRadius * 0.5, 16);
+                const viaInnerMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x1a1a2e,  // 深色孔洞
+                    transparent: true,
+                    opacity: 0.9,
+                    side: THREE.DoubleSide
+                });
+                const viaInner = new THREE.Mesh(viaInnerGeometry, viaInnerMaterial);
+                viaInner.position.set(viaX, viaY, layerZ + 1.5);
+                scene3d.add(viaInner);
+                
+                // 存储过孔位置供连线使用
+                layerViaPositions.push({
+                    x: viaX,
+                    y: viaY,
+                    z: layerZ,
+                    layer: layer
+                });
+            }
+        }
+        layerVias.push({ layer, vias: layerViaPositions });
+    }
+
+    // 创建链接
+    const edgeCalls = [];
+    callGraphData.forEach(node => {
+        node.callees.forEach(callee => {
+            const fromIdx = nameToNode.get(node.name);
+            const toName = callee.name;
+            const toIdx = nameToNode.get(toName);
+            if (fromIdx !== undefined && toIdx !== undefined) {
+                const calls = parseInt(callee.calls) || 1;
+                edgeCalls.push({ source: fromIdx, target: toIdx, calls });
+            }
+        });
+    });
+
+    const maxEdgeCalls = Math.max(...edgeCalls.map(e => e.calls), 1);
+    const minEdgeCalls = Math.min(...edgeCalls.map(e => e.calls), 1);
+    
+    // 根据调用次数获取颜色 - 使用更均衡的配色 (青色->橙色渐变)
+    function getLinkColor(value, min, max) {
+        const t = max === min ? 0.5 : (value - min) / (max - min);
+        // 使用 HSL 色彩空间，从青色(180°)到橙色(30°)
+        const hue = 180 - t * 150; // 180°(青) -> 30°(橙)
+        const saturation = 0.7 + t * 0.3;
+        const lightness = 0.5 + t * 0.2;
+        
+        // HSL 转 RGB
+        const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
+        const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
+        const m = lightness - c / 2;
+        
+        let r, g, b;
+        if (hue < 60) { r = c; g = x; b = 0; }
+        else if (hue < 120) { r = x; g = c; b = 0; }
+        else if (hue < 180) { r = 0; g = c; b = x; }
+        else { r = 0; g = x; b = c; }
+        
+        return new THREE.Color(r + m, g + m, b + m);
+    }
+    
+    
+    // 创建箭头的辅助函数
+    function createArrowHead(position, direction, color, size = 1.5) {
+        const arrowGeometry = new THREE.ConeGeometry(size * 0.8, size * 2, 8);
+        const arrowMaterial = new THREE.MeshBasicMaterial({ 
+            color: color,
+            transparent: true,
+            opacity: 0.9
+        });
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+        arrow.position.copy(position);
+        
+        // 让箭头指向目标方向
+        const up = new THREE.Vector3(0, 1, 0);
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromUnitVectors(up, direction.clone().normalize());
+        arrow.setRotationFromQuaternion(quaternion);
+        
+        return arrow;
+    }
+    
+    // 创建锚点标记的辅助函数
+    function createAnchorMarker(position, color, size = 0.8) {
+        const geometry = new THREE.SphereGeometry(size, 8, 8);
+        const material = new THREE.MeshBasicMaterial({ 
+            color: color,
+            transparent: true,
+            opacity: 0.8
+        });
+        return new THREE.Mesh(geometry, material);
+    }
+    
+    // 存储锚点使用情况，用于分散多个连接到同一节点的情况
+    const nodeAnchorUsage = new Map();
+    nodes3d.forEach((n, idx) => {
+        nodeAnchorUsage.set(idx, { left: 0, right: 0 });
+    });
+    
+    // findNearestVia 函数已移到全局作用域
+    
+    edgeCalls.forEach((edge, edgeIdx) => {
+        const sourceNode = nodes3d[edge.source];
+        const targetNode = nodes3d[edge.target];
+        
+        // 流程图风格：固定使用右侧出口锚点和左侧入口锚点
+        const sourceAnchorType = 'right';  // 出口锚点
+        const targetAnchorType = 'left';   // 入口锚点
+        
+        // 获取锚点使用计数
+        const sourceUsage = nodeAnchorUsage.get(edge.source);
+        const targetUsage = nodeAnchorUsage.get(edge.target);
+        
+        // 更新锚点使用计数
+        sourceUsage[sourceAnchorType]++;
+        targetUsage[targetAnchorType]++;
+        
+        // 添加偏移以避免锚点重叠（在Y方向上错开）
+        const sourceOffset = (sourceUsage[sourceAnchorType] - 1) * 5;
+        const targetOffset = (targetUsage[targetAnchorType] - 1) * 5;
+        
+        const startPos = getAnchorPosition(sourceNode, sourceAnchorType);
+        const endPos = getAnchorPosition(targetNode, targetAnchorType);
+        
+        // 应用Y方向偏移以避免多条线重叠
+        if (sourceOffset > 0 || targetOffset > 0) {
+            startPos.y += sourceOffset;
+            endPos.y += targetOffset;
+        }
+        
+        // 使用浅灰色作为连线颜色
+        const color = new THREE.Color(0x888888);  // 浅灰色
+        const layerDiff = Math.abs(sourceNode.layer - targetNode.layer);
+        
+        // 构建电路板风格的走线路径点
+        const pathPoints = [];
+        
+        if (layerDiff > 0) {
+            // 跨层连接：先水平走线到过孔，然后垂直穿过所有层，最后水平走线到目标
+            const sourceLayerZ = sourceNode.fixedZ;
+            const targetLayerZ = targetNode.fixedZ;
+            
+            // 在源层找到最近的过孔（用于垂直穿线）
+            const via = findNearestVia(startPos.x, startPos.y, layerVias, sourceNode.layer);
+            const viaX = via ? via.x : (startPos.x + endPos.x) / 2;
+            const viaY = via ? via.y : (startPos.y + endPos.y) / 2;
+            
+            // 起点
+            pathPoints.push(startPos.clone());
+            
+            // 源层：水平走线到过孔
+            pathPoints.push(new THREE.Vector3(viaX, viaY, sourceLayerZ));
+            
+            // 垂直穿过所有中间层（XY位置不变，只有Z变化）
+            const minLayer = Math.min(sourceNode.layer, targetNode.layer);
+            const maxLayer = Math.max(sourceNode.layer, targetNode.layer);
+            
+            for (let l = minLayer + 1; l < maxLayer; l++) {
+                const midLayerZ = (l - numLayers / 2) * forceParams.layerSeparation;
+                // 垂直穿线：XY位置保持不变
+                pathPoints.push(new THREE.Vector3(viaX, viaY, midLayerZ));
+            }
+            
+            // 到达目标层的过孔位置（垂直穿线结束）
+            pathPoints.push(new THREE.Vector3(viaX, viaY, targetLayerZ));
+            
+            // 目标层：水平走线到目标节点
+            pathPoints.push(endPos.clone());
+        } else {
+            // 同层连接：直接走线，但可以经过一个过孔来绕行
+            const dx = endPos.x - startPos.x;
+            const dy = endPos.y - startPos.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist > 100) {
+                // 长距离连接：经过一个中间过孔
+                const midVia = findNearestVia((startPos.x + endPos.x) / 2, (startPos.y + endPos.y) / 2, layerVias, sourceNode.layer);
+                if (midVia) {
+                    pathPoints.push(startPos.clone());
+                    pathPoints.push(new THREE.Vector3(midVia.x, midVia.y, sourceNode.fixedZ));
+                    pathPoints.push(endPos.clone());
+                } else {
+                    // 直接连接
+                    pathPoints.push(startPos.clone());
+                    pathPoints.push(endPos.clone());
+                }
+            } else {
+                // 短距离：直接连接
+                pathPoints.push(startPos.clone());
+                pathPoints.push(endPos.clone());
+            }
+        }
+        
+        // 使用 TubeGeometry 创建粗线，线宽基于调用次数的 log
+        const lineWidth = 0.5 + Math.log(edge.calls + 1) * 0.1;  // 使用 log 计算线宽
+        
+        // 创建曲线路径
+        const curve = new THREE.CatmullRomCurve3(pathPoints);
+        const tubeGeometry = new THREE.TubeGeometry(curve, pathPoints.length * 4, lineWidth, 6, false);
+        
+        const tubeMaterial = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.6 + Math.log(edge.calls + 1) * 0.05
+        });
+
+        const line = new THREE.Mesh(tubeGeometry, tubeMaterial);
+        scene3d.add(line);
+
+        links3d.push({ 
+            source: edge.source, 
+            target: edge.target, 
+            mesh: line, 
+            arrowMesh: null,
+            sourceAnchorType: sourceAnchorType,
+            targetAnchorType: targetAnchorType,
+            calls: edge.calls,
+            pathPoints: pathPoints  // 存储路径点用于更新
+        });
+    });
+
+    document.getElementById('loading3D').style.display = 'none';
+    startForceSimulation();
+}
+
+// 计算节点锚点位置的辅助函数 - 流程图风格：左侧入口，右侧出口
+function getAnchorPosition(node3d, anchorType) {
+    if (!node3d || !node3d.mesh) {
+        console.warn('getAnchorPosition: invalid node3d');
+        return new THREE.Vector3(0, 0, 0);
+    }
+    
+    const pos = node3d.mesh.position.clone();
+    const scale = node3d.mesh.scale.x || 12;
+    const halfWidth = scale / 2;
+    
+    // Canvas 上锚点的位置（像素）
+    // 左侧锚点在 x=8，右侧锚点在 x=canvas.width - 8 = 272
+    // Canvas 宽度 280
+    const canvasWidth = 280;
+    const anchorOffset = 8; // 锚点距离边缘的像素距离
+    
+    // 转换到世界坐标
+    // Canvas 左边缘对应 pos.x - halfWidth
+    // Canvas 右边缘对应 pos.x + halfWidth
+    const pixelToWorld = scale / canvasWidth;
+    
+    // 检查 NaN
+    if (isNaN(pos.x) || isNaN(pos.y) || isNaN(pos.z) || isNaN(pixelToWorld)) {
+        console.warn('getAnchorPosition: NaN detected', { pos, scale, pixelToWorld });
+        return new THREE.Vector3(0, 0, 0);
+    }
+    
+    switch(anchorType) {
+        case 'left':   // 入口锚点 (Canvas x=8)
+            return new THREE.Vector3(
+                pos.x - halfWidth + anchorOffset * pixelToWorld,
+                pos.y,
+                pos.z
+            );
+        case 'right':  // 出口锚点 (Canvas x=272)
+            return new THREE.Vector3(
+                pos.x + halfWidth - anchorOffset * pixelToWorld,
+                pos.y,
+                pos.z
+            );
+        default:
+            return pos.clone();
+    }
+}
+
+// 力导向模拟
+function startForceSimulation() {
+    simulationRunning = true;
+    let alpha = 1.0;
+    const alphaMin = 0.001;
+    const alphaDecay = forceParams.alphaDecay;
+    const layerWidth = 1024;   // 固定宽度
+    const layerHeight = 768;  // 固定高度
+
+    function tick() {
+        if (!simulationRunning || alpha < alphaMin) {
+            simulationRunning = false;
+            return;
+        }
+
+        // 计算斥力（节点间）
+        for (let i = 0; i < nodes3d.length; i++) {
+            const node = nodes3d[i];
+            if (node.fx !== null) continue; // 跳过固定节点
+
+            node.vx *= forceParams.velocityDecay;
+            node.vy *= forceParams.velocityDecay;
+            node.vz *= forceParams.velocityDecay;
+
+            // 斥力
+            for (let j = i + 1; j < nodes3d.length; j++) {
+                const other = nodes3d[j];
+                const dx = node.x - other.x;
+                const dy = node.y - other.y;
+                const dz = node.z - other.z;
+                const distance = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
+                const strength = forceParams.charge / (distance * distance);
+                const fx = (dx / distance) * strength;
+                const fy = (dy / distance) * strength;
+                const fz = (dz / distance) * strength;
+
+                node.vx += fx;
+                node.vy += fy;
+                node.vz += fz;
+                other.vx -= fx;
+                other.vy -= fy;
+                other.vz -= fz;
+            }
+
+            // 引力（链接）
+            links3d.forEach(link => {
+                if (link.source === i || link.target === i) {
+                    const otherIdx = link.source === i ? link.target : link.source;
+                    const other = nodes3d[otherIdx];
+                    const dx = node.x - other.x;
+                    const dy = node.y - other.y;
+                    const dz = node.z - other.z;
+                    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
+                    const strength = (distance - forceParams.linkDistance) * forceParams.linkStrength;
+                    const fx = (dx / distance) * strength;
+                    const fy = (dy / distance) * strength;
+                    const fz = (dz / distance) * strength;
+
+                    if (node.fx === null) {
+                        node.vx -= fx;
+                        node.vy -= fy;
+                        node.vz -= fz;
+                    }
+                    if (other.fx === null) {
+                        other.vx += fx;
+                        other.vy += fy;
+                        other.vz += fz;
+                    }
+                }
+            })
+
+            // 更新位置 - 只在XY平面上移动，Z坐标固定在层平面上
+            if (node.fx === null) {
+                node.x += node.vx * alpha;
+                node.y += node.vy * alpha;
+                // Z坐标固定在层平面上，不更新
+                node.z = node.fixedZ;
+                
+                // 检查 NaN 并修正
+                if (isNaN(node.x)) node.x = 0;
+                if (isNaN(node.y)) node.y = 0;
+                if (isNaN(node.z)) node.z = node.fixedZ || 0;
+                
+                // 限制位置在层板边界内
+                const boundX = (layerWidth - 20)/2;
+                const boundY = (layerHeight - 20)/2;
+                node.x = Math.max(-boundX, Math.min(boundX, node.x));
+                node.y = Math.max(-boundY, Math.min(boundY, node.y));
+                // Z始终固定在层平面
+                node.z = node.fixedZ;
+                
+                node.mesh.position.set(node.x, node.y, node.z);
+                // 同时更新圆圈位置
+                if (node.circle) {
+                    node.circle.position.set(node.x, node.y, node.z);
+                }
+            }
+        }
+        
+        // 更新链接位置 - 使用折线（电路板走线风格）
+        links3d.forEach(link => {
+            const sourceNode = nodes3d[link.source];
+            const targetNode = nodes3d[link.target];
+            
+            // 检查节点有效性
+            if (!sourceNode || !targetNode) return;
+            
+            // 重新计算锚点位置
+            const startPos = getAnchorPosition(sourceNode, link.sourceAnchorType);
+            const endPos = getAnchorPosition(targetNode, link.targetAnchorType);
+            
+            // 检查锚点位置有效性
+            if (isNaN(startPos.x) || isNaN(startPos.y) || isNaN(startPos.z) ||
+                isNaN(endPos.x) || isNaN(endPos.y) || isNaN(endPos.z)) {
+                return; // 跳过无效的链接
+            }
+            
+            const layerDiff = Math.abs(sourceNode.layer - targetNode.layer);
+            
+            // 构建电路板风格的走线路径点
+            const pathPoints = [];
+            
+            if (layerDiff > 0) {
+                // 跨层连接：先水平走线到过孔，然后垂直穿过所有层，最后水平走线到目标
+                const sourceLayerZ = sourceNode.fixedZ;
+                const targetLayerZ = targetNode.fixedZ;
+                
+                // 在源层找到最近的过孔（用于垂直穿线）
+                const via = findNearestVia(startPos.x, startPos.y, layerVias, sourceNode.layer);
+                const viaX = via ? via.x : (startPos.x + endPos.x) / 2;
+                const viaY = via ? via.y : (startPos.y + endPos.y) / 2;
+                
+                // 起点
+                pathPoints.push(startPos.clone());
+                
+                // 源层：水平走线到过孔
+                pathPoints.push(new THREE.Vector3(viaX, viaY, sourceLayerZ));
+                
+                // 垂直穿过所有中间层（XY位置不变，只有Z变化）
+                const minLayer = Math.min(sourceNode.layer, targetNode.layer);
+                const maxLayer = Math.max(sourceNode.layer, targetNode.layer);
+                
+                for (let l = minLayer + 1; l < maxLayer; l++) {
+                    const midLayerZ = (l - numLayers / 2) * forceParams.layerSeparation;
+                    // 垂直穿线：XY位置保持不变
+                    pathPoints.push(new THREE.Vector3(viaX, viaY, midLayerZ));
+                }
+                
+                // 到达目标层的过孔位置（垂直穿线结束）
+                pathPoints.push(new THREE.Vector3(viaX, viaY, targetLayerZ));
+                
+                // 目标层：水平走线到目标节点
+                pathPoints.push(endPos.clone());
+            } else {
+                // 同层连接：直接走线
+                pathPoints.push(startPos.clone());
+                pathPoints.push(endPos.clone());
+            }
+            
+            // 验证所有点都有效
+            const validPoints = pathPoints.every(p => 
+                !isNaN(p.x) && !isNaN(p.y) && !isNaN(p.z) &&
+                isFinite(p.x) && isFinite(p.y) && isFinite(p.z)
+            );
+            
+            if (!validPoints) return; // 跳过无效的路径
+            
+            // 更新 TubeGeometry
+            const lineWidth = 0.5 + Math.log(link.calls + 1) * 0.1;
+            const curve = new THREE.CatmullRomCurve3(pathPoints);
+            const newGeometry = new THREE.TubeGeometry(curve, pathPoints.length * 4, lineWidth, 6, false);
+            link.mesh.geometry.dispose();
+            link.mesh.geometry = newGeometry;
+            
+            // 更新存储的路径点，用于高亮
+            link.pathPoints = pathPoints.map(p => p.clone());
+        });
+
+        alpha = Math.max(alphaMin, alpha - alphaDecay);
+        requestAnimationFrame(tick);
+    }
+
+    tick();
+}
+
+function animate3D() {
+    animationId3d = requestAnimationFrame(animate3D);
+    
+    if (controls3d) controls3d.update();
+
+    // 鼠标悬停检测 - 高亮调用链路树
+    if (raycaster3d && camera3d) {
+        raycaster3d.setFromCamera(mouse3d, camera3d);
+        const intersects = raycaster3d.intersectObjects(nodes3d.map(n => n.mesh));
+        const nodeInfo = document.getElementById('nodeInfo');
+
+        if (intersects.length > 0) {
+            const mesh = intersects[0].object;
+            const data = mesh.userData;
+            nodeInfo.innerHTML = `<strong>${escapeHtml(data.name)}</strong><br>calls: ${data.calls.toLocaleString()}<br>time: ${data.timePercent.toFixed(2)}%`;
+            document.body.style.cursor = 'pointer';
+            
+            // 高亮调用链路树
+            highlightCallTree(data.name);
+        } else {
+            nodeInfo.textContent = '';
+            document.body.style.cursor = 'default';
+            
+            // 取消高亮
+            resetHighlight();
+        }
+    }
+
+    if (renderer3d && scene3d && camera3d) {
+        renderer3d.render(scene3d, camera3d);
+    }
+}
+
+// 高亮调用链路树
+let highlightedNodes = new Set();
+let highlightedLinks = new Set();
+
+function highlightCallTree(nodeName) {
+    // 重置之前的高亮
+    resetHighlight();
+    
+    // 找到节点索引
+    const nodeIdx = nodes3d.findIndex(n => n.data && n.data.name === nodeName);
+    if (nodeIdx === -1) return;
+    
+    // 递归收集所有相关节点和链接
+    const visitedNodes = new Set();
+    const visitedLinks = new Set();
+    
+    // 向上收集 callers
+    function collectCallers(idx, depth = 0) {
+        if (visitedNodes.has(idx) || depth > 10) return;
+        visitedNodes.add(idx);
+        
+        // 找到所有调用此节点的链接
+        links3d.forEach((link, linkIdx) => {
+            if (link.target === idx && !visitedLinks.has(linkIdx)) {
+                visitedLinks.add(linkIdx);
+                collectCallers(link.source, depth + 1);
+            }
+        });
+    }
+    
+    // 向下收集 callees
+    function collectCallees(idx, depth = 0) {
+        if (visitedNodes.has(idx) || depth > 10) return;
+        visitedNodes.add(idx);
+        
+        // 找到所有此节点调用的链接
+        links3d.forEach((link, linkIdx) => {
+            if (link.source === idx && !visitedLinks.has(linkIdx)) {
+                visitedLinks.add(linkIdx);
+                collectCallees(link.target, depth + 1);
+            }
+        });
+    }
+    
+    // 从当前节点开始收集
+    visitedNodes.add(nodeIdx);
+    collectCallers(nodeIdx);
+    collectCallees(nodeIdx);
+    
+    highlightedNodes = visitedNodes;
+    highlightedLinks = visitedLinks;
+    
+    // 直接修改链接材质颜色来高亮
+    console.log('highlightCallTree:', nodeName, 'visitedLinks:', visitedLinks.size, 'links3d:', links3d.length);
+    
+    links3d.forEach((link, idx) => {
+        if (link && link.mesh && link.mesh.material) {
+            if (visitedLinks.has(idx)) {
+                // 高亮 - 亮绿色
+                link.mesh.material.color.setHex(0x00ff88);
+                link.mesh.material.opacity = 1.0;
+                link.mesh.material.needsUpdate = true;
+            }
+            // 不暗化其他链接，保持原样
+        }
+    });
+    
+    // 高亮节点 - 稍微放大
+    visitedNodes.forEach(nodeIdx => {
+        const node = nodes3d[nodeIdx];
+        if (node && node.mesh) {
+            const originalScale = node.mesh.scale.x;
+            node.mesh.userData.originalScale = originalScale;
+            node.mesh.scale.set(originalScale * 1.1, originalScale * 1.1 * 0.2, 1);
+        }
+    });
+}
+
+function resetHighlight() {
+    // 恢复所有链接的原始颜色
+    links3d.forEach(link => {
+        if (link && link.mesh && link.mesh.material) {
+            link.mesh.material.color.setHex(0x888888);
+            link.mesh.material.opacity = 0.6 + Math.log(link.calls + 1) * 0.05;
+        }
+    });
+    
+    // 恢复节点原始大小
+    highlightedNodes.forEach(nodeIdx => {
+        const node = nodes3d[nodeIdx];
+        if (node && node.mesh && node.mesh.userData.originalScale) {
+            const scale = node.mesh.userData.originalScale;
+            node.mesh.scale.set(scale, scale * 0.2, 1);
+        }
+    });
+    
+    highlightedNodes.clear();
+    highlightedLinks.clear();
+}
+
+// 启动主循环（仅一次）
+if (!animationId3d) {
+    animate3D();
+}
+    </script>
+</body>
+</html>

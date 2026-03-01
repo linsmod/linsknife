@@ -1,0 +1,238 @@
+# Query: rtti
+# Including: .c
+
+302 个结果 - 6 文件
+
+tcc_rtti.c:
+    2:  * RTTI (Run-Time Type Information) Support for TCC
+    4:  * This file implements the emission of RTTI data to ELF format.
+    8: #include "tcc_rtti.h"
+   10: /* External reference to global RTTI table */
+   11: extern RTTIInfo *rtti_table;
+   53: static addr_t emit_rtti_info(TCCState *s1, RTTIInfo *rtti);
+   55: /* Emit a single RTTI field structure */
+   56: static void emit_rtti_field(TCCState *s1, Section *s, struct RTTIField *field)
+   89:         addr_t type_info_addr = emit_rtti_info(s1, field->type_info);
+  107: /* Emit RTTI info for a single type */
+  108: static addr_t emit_rtti_info(TCCState *s1, RTTIInfo *rtti)
+  113:     if (!rtti)
+  116:     /* Create or get the RTTI section */
+  117:     s = find_section(s1, ".tcc.rtti");
+  119:         s = new_section(s1, ".tcc.rtti", SHT_PROGBITS, SHF_ALLOC);
+  124:     /* RTTI Header structure:
+  136:     section_write_int32(s, rtti->type_id);
+  139:     section_write_int32(s, rtti->size);
+  142:     section_write_int32(s, rtti->align);
+  145:     section_write_int32(s, rtti->type_hash);
+  148:     if (rtti->name) {
+  150:         section_write_string(s, rtti->name);
+  161:     section_write_int32(s, rtti->field_count);
+  164:     if (rtti->fields && rtti->field_count > 0) {
+  168:         for (int i = 0; i < rtti->field_count; i++) {
+  169:             emit_rtti_field(s1, s, &rtti->fields[i]);
+  187: /* Main function to emit all RTTI data */
+  188: ST_FUNC void tcc_emit_rtti(TCCState *s1)
+  190:     RTTIInfo *rtti;
+  198:     /* Count RTTI entries */
+  199:     for (rtti = rtti_table; rtti; rtti = rtti->next) {
+  204:         /* No RTTI data to emit */
+  211:     /* Create RTTI section */
+  212:     s = new_section(s1, ".tcc.rtti", SHT_PROGBITS, SHF_ALLOC);
+  214:     /* Write RTTI header:
+  216:      * - count: number of RTTI entries
+  225:     /* Emit each RTTI entry and store offsets */
+  227:     for (rtti = rtti_table; rtti; rtti = rtti->next, i++) {
+  228:         type_offsets[i] = emit_rtti_info(s1, rtti);
+  231:     /* Now create the global RTTI table array for runtime access */
+  232:     /* Create a symbol for __tcc_rtti_count */
+  233:     int count_tok = tok_alloc_const("__tcc_rtti_count");
+  244:     /* Create a symbol for __tcc_rtti_table */
+  245:     int table_tok = tok_alloc_const("__tcc_rtti_table");
+  250:     /* Create the table: array of pointers to RTTI entries */
+  253:         /* Each entry is a pointer to the RTTI data in .tcc.rtti section */
+  267: /* Function to get RTTI info for a type by name (for runtime use) */
+  268: ST_FUNC RTTIInfo *tcc_get_rtti_by_name(const char *name)
+  270:     RTTIInfo *rtti;
+  272:     for (rtti = rtti_table; rtti; rtti = rtti->next) {
+  273:         if (rtti->name && strcmp(rtti->name, name) == 0) {
+  274:             return rtti;
+  281: /* Function to get RTTI info for a type by type_id */
+  282: ST_FUNC RTTIInfo *tcc_get_rtti_by_id(int type_id)
+  284:     RTTIInfo *rtti;
+  286:     for (rtti = rtti_table; rtti; rtti = rtti->next) {
+  287:         if (rtti->type_id == type_id) {
+  288:             return rtti;
+  295: /* Function to get RTTI info for a type by hash */
+  296: ST_FUNC RTTIInfo *tcc_get_rtti_by_hash(uint32_t hash)
+  298:     RTTIInfo *rtti;
+  300:     for (rtti = rtti_table; rtti; rtti = rtti->next) {
+  301:         if (rtti->type_hash == hash) {
+  302:             return rtti;
+  309: /* Debug function to print RTTI info */
+  310: #ifdef TCC_RTTI_DEBUG
+  311: ST_FUNC void tcc_print_rtti_info(RTTIInfo *rtti)
+  315:     if (!rtti) {
+  316:         printf("RTTI: NULL\n");
+  320:     printf("RTTI Info:\n");
+  321:     printf("  Name: %s\n", rtti->name ? rtti->name : "(anonymous)");
+  322:     printf("  Type ID: %d\n", rtti->type_id);
+  323:     printf("  Size: %d\n", rtti->size);
+  324:     printf("  Align: %d\n", rtti->align);
+  325:     printf("  Hash: 0x%08x\n", rtti->type_hash);
+  326:     printf("  Field Count: %d\n", rtti->field_count);
+  328:     if (rtti->fields) {
+  329:         for (i = 0; i < rtti->field_count; i++) {
+  330:             struct RTTIField *f = &rtti->fields[i];
+  341: #endif /* TCC_RTTI_DEBUG */
+
+tccgen.c:
+   435: // 全局RTTI表
+   436: RTTIInfo *rtti_table = NULL;  /* Non-static for tcc_rtti.c access */
+   439: ST_FUNC void tcc_emit_rtti(TCCState *s1);
+   464:     /* Emit RTTI data to ELF before freeing */
+   465:     tcc_emit_rtti(s1);
+   467: /* 释放RTTI表 */
+   468: RTTIInfo *rtti = rtti_table;
+   469: while (rtti) {
+   470:     RTTIInfo *next = rtti->next;
+   473:     if (rtti->name) {
+   474:         tcc_free((void*)rtti->name);
+   478:     if (rtti->fields) {
+   480:         for (i = 0; i < rtti->field_count; i++) {
+   481:             if (rtti->fields[i].name) {
+   482:                 tcc_free((void*)rtti->fields[i].name);
+   486:         tcc_free(rtti->fields);
+   489:     tcc_free(rtti);
+   490:     rtti = next;
+   492: rtti_table = NULL;
+  4571:     // RTTI相关变量
+  4572:     RTTIInfo *rtti = NULL;
+  4635:         /* 检查是否需要RTTI（通过 reflect 注解） */
+  4637:             /* 非空结构体才需要RTTI */
+  4679:                 /* 为RTTI分配内存 */
+  4680:                 rtti = tcc_mallocz(sizeof(RTTIInfo));
+  4681:                 rtti->fields = tcc_mallocz(field_count * sizeof(struct RTTIField));
+  4682:                 rtti->field_count = field_count;
+  4683:                 rtti->type_id = s->type_id;  // 使用结构体的类型ID;
+  4688:                     rtti->name = tcc_malloc(strlen(name) + 1);
+  4689:                     strcpy((char*)rtti->name, name);
+  4693:                     rtti->name = tcc_malloc(strlen(buf) + 1);
+  4694:                     strcpy((char*)rtti->name, buf);
+  4885:                         /* 填充RTTI字段信息（偏移量将在布局后更新） */
+  4886:                         if (rtti && field_idx < field_count) {
+  4887:                             struct RTTIField *rf = &rtti->fields[field_idx];
+  4904:                                 rf->type_info = type1.ref->rtti_info;
+  4942:             /* 在属性解析后检查是否需要RTTI（通过 reflect 注解） */
+  4943:             fprintf(stderr, "DEBUG: after parse_attribute, ad.reflect=%p, u=%d, rtti=%p\n", (void*)ad.reflect, u, (void*)rtti);
+  4944:             if (u != VT_ENUM && ad.reflect && !rtti) {
+  4945:                 /* 遍历已解析的结构体字段来收集RTTI信息 */
+  4951:                     rtti = tcc_mallocz(sizeof(RTTIInfo));
+  4952:                     rtti->fields = tcc_mallocz(field_count * sizeof(struct RTTIField));
+  4953:                     rtti->field_count = field_count;
+  4954:                     rtti->type_id = s->type_id;
+  4959:                         rtti->name = tcc_malloc(strlen(reflect_name) + 1);
+  4960:                         strcpy((char*)rtti->name, reflect_name);
+  4964:                         rtti->name = tcc_malloc(strlen(buf) + 1);
+  4965:                         strcpy((char*)rtti->name, buf);
+  4971:                         struct RTTIField *rf = &rtti->fields[field_idx];
+  4988:                             rf->type_info = ss->type.ref->rtti_info;
+  5009:             if (rtti) {
+  5013:                         rtti->fields[field_idx].offset = ss->c;
+  5018:                 /* 填充结构体本身的RTTI信息 */
+  5019:                 rtti->size = s->c;
+  5020:                 rtti->align = s->r;
+  5021:                 rtti->type_hash = compute_type_hash(type);
+  5024:                 s->rtti_info = rtti;
+  5026:                 /* 添加到全局RTTI表 */
+  5027:                 rtti->next = rtti_table;
+  5028:                 rtti_table = rtti;
+
+test_rtti_runtime.c:
+   1: // Test RTTI runtime API
+   4: #include "include/tcc_rtti_runtime.h"
+   6: // Define structs with RTTI reflection
+  22:     printf("=== RTTI Runtime Test ===\n\n");
+  24:     // Get RTTI for Point
+  25:     const tcc_rtti_type_t *point_type = tcc_rtti_get("MyPoint");
+  27:         printf("Found RTTI for 'MyPoint':\n");
+  28:         tcc_rtti_print(point_type);
+  30:         // Access field using RTTI
+  31:         int *x_ptr = (int *)tcc_rtti_get_field_ptr(&p, point_type, "x");
+  32:         int *y_ptr = (int *)tcc_rtti_get_field_ptr(&p, point_type, "y");
+  35:             printf("\n  Using RTTI to access Point fields:\n");
+  36:             printf("    p.x = %d (via RTTI: %d)\n", p.x, *x_ptr);
+  37:             printf("    p.y = %d (via RTTI: %d)\n", p.y, *y_ptr);
+  39:             // Modify via RTTI
+  45:         printf("RTTI for 'MyPoint' not found\n");
+  50:     // Get RTTI for Rectangle
+  51:     const tcc_rtti_type_t *rect_type = tcc_rtti_get("MyRectangle");
+  53:         printf("Found RTTI for 'MyRectangle':\n");
+  54:         tcc_rtti_print(rect_type);
+  56:         printf("RTTI for 'MyRectangle' not found\n");
+  62:     int count = tcc_rtti_get_count();
+  66:         const tcc_rtti_type_t *t = tcc_rtti_get_at(i);
+
+test_rtti_simple.c:
+  1: // Test RTTI functionality with new annotation format
+  2: // Use: ./tcc -B. -I./include -c test_rtti_simple.c -o test_rtti_simple.o
+
+test_rtti.c:
+   1: // Test RTTI functionality
+  27:     printf("\nRTTI test passed!\n");
+
+lib/tcc_rtti_runtime.c:
+    2:  * TCC RTTI Runtime Library
+    4:  * This file implements the runtime API for accessing RTTI information.
+    6:  * The RTTI data is generated by the compiler and stored in a global
+   16: #include "../include/tcc_rtti_runtime.h"
+   19:  * The RTTI table is generated by the compiler.
+   20:  * It's declared as a weak symbol so programs without RTTI still work.
+   22: extern const tcc_rtti_type_t *__tcc_rtti_table[];
+   23: extern const int __tcc_rtti_count;
+   25: /* Weak declarations for programs without RTTI */
+   26: __attribute__((weak)) const tcc_rtti_type_t *__tcc_rtti_table[1] = { NULL };
+   27: __attribute__((weak)) const int __tcc_rtti_count = 0;
+   29: /* Parsed RTTI data */
+   30: static int g_rtti_initialized = 0;
+   31: static int g_rtti_count = 0;
+   32: static const tcc_rtti_type_t **g_rtti_types = NULL;
+   34: /* Ensure RTTI is initialized */
+   37:     if (g_rtti_initialized) {
+   41:     g_rtti_count = __tcc_rtti_count;
+   42:     g_rtti_types = (const tcc_rtti_type_t **)__tcc_rtti_table;
+   43:     g_rtti_initialized = 1;
+   46: /* Get RTTI by name */
+   47: const tcc_rtti_type_t *tcc_rtti_get(const char *name)
+   51:     if (!name || !g_rtti_types) {
+   55:     for (int i = 0; i < g_rtti_count; i++) {
+   56:         if (g_rtti_types[i]->name && strcmp(g_rtti_types[i]->name, name) == 0) {
+   57:             return g_rtti_types[i];
+   64: /* Get RTTI by type ID */
+   65: const tcc_rtti_type_t *tcc_rtti_get_by_id(int type_id)
+   69:     if (!g_rtti_types) {
+   73:     for (int i = 0; i < g_rtti_count; i++) {
+   74:         if (g_rtti_types[i]->type_id == type_id) {
+   75:             return g_rtti_types[i];
+   82: /* Get RTTI by hash */
+   83: const tcc_rtti_type_t *tcc_rtti_get_by_hash(uint32_t hash)
+   87:     if (!g_rtti_types) {
+   91:     for (int i = 0; i < g_rtti_count; i++) {
+   92:         if (g_rtti_types[i]->type_hash == hash) {
+   93:             return g_rtti_types[i];
+  101: const tcc_rtti_field_t *tcc_rtti_get_field(const tcc_rtti_type_t *type, const char *field_name)
+  117: int tcc_rtti_get_field_offset(const tcc_rtti_type_t *type, const char *field_name)
+  119:     const tcc_rtti_field_t *field = tcc_rtti_get_field(type, field_name);
+  124: void *tcc_rtti_get_field_ptr(void *instance, const tcc_rtti_type_t *type, const char *field_name)
+  130:     int offset = tcc_rtti_get_field_offset(type, field_name);
+  138: /* Print RTTI info */
+  139: void tcc_rtti_print(const tcc_rtti_type_t *type)
+  142:         printf("RTTI: NULL\n");
+  146:     printf("RTTI Type Info:\n");
+  156:             const tcc_rtti_field_t *f = &type->fields[i];
+  160:             if (f->flags & TCC_RTTI_FIELD_IS_BITFIELD) {
+  164:             if (f->flags & TCC_RTTI_FIELD_IS_ARRAY) {
+  172: int tcc_rtti_get_count(void)
+  175:     return g_rtti_count;
+  179: const tcc_rtti_type_t *tcc_rtti_get_at(int index)
+  183:     if (index < 0 || index >= g_rtti_count || !g_rtti_types) {
+  187:     return g_rtti_types[index];
